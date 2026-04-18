@@ -4,7 +4,7 @@
 >
 > **Trường:** Đại học Bách khoa — Đại học Đà Nẵng · Khoa Điện · Lớp 21TDH2  
 > **GVHD:** PGS. TS Lê Tiến Dũng  
-> **SVTH:** Phan Hữu Anh Đức (105210111) · Trương Bảo Quang (105210332)
+> **SVTH:** Phan Hữu Anh Đức (105210311) · Trương Bảo Quang (105210332)
 
 
 ---
