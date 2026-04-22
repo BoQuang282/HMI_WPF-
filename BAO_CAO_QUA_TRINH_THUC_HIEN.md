@@ -3,13 +3,6 @@
 # HỆ THỐNG ĐIỀU KHIỂN GIÁM SÁT ROBOT SONG SONG 3RRR
 
 > **Đề tài:** Ứng dụng mạng nơ-ron nhân tạo RBFNN và thiết kế, thi công hệ thống điều khiển giám sát cho Robot song song phẳng 3 bậc tự do
->
-> **Trường:** Đại học Bách khoa — Đại học Đà Nẵng · Khoa Điện · Lớp 21TDH2  
-> **GVHD:** PGS. TS Lê Tiến Dũng  
-> **SVTH:** Phan Hữu Anh Đức (105210311) · Trương Bảo Quang (105210332)
->
-> **Ngày lập:** 22/04/2026
-
 ---
 
 ## 📑 MỤC LỤC
