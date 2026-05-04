@@ -2,7 +2,14 @@
 
 # HỆ THỐNG ĐIỀU KHIỂN GIÁM SÁT ROBOT SONG SONG 3RRR
 
-> **Đề tài:** Ứng dụng mạng nơ-ron nhân tạo RBFNN và thiết kế, thi công hệ thống điều khiển giám sát cho Robot song song phẳng 3 bậc tự do
+> **Đề tài:** Thiết kế và triển khai hệ thống điều khiển và giám sát sử dụng thuật toán điều khiển mô-men tính toán đồng bộ dựa trên mạng nơ-ron cho Robot song song phẳng 3 bậc tự do
+>
+> **Trường:** Đại học Bách khoa — Đại học Đà Nẵng · Khoa Điện · Lớp 21TDH2  
+> **GVHD:** PGS. TS Lê Tiến Dũng  
+> **SVTH:** Phan Hữu Anh Đức (105210311) · Trương Bảo Quang (105210332)
+>
+> **Ngày lập:** 22/04/2026
+
 ---
 
 ## 📑 MỤC LỤC
@@ -44,7 +51,7 @@ Hệ thống gồm 2 phần vật lý:
 
 ### 1.3. Điểm đặc biệt quan trọng
 
-> ⚠️ **Sai số KHÔNG đến từ STM32.** STM32 chỉ gửi 9 giá trị mong muốn + 1 byte trạng thái. Toàn bộ giá trị **thực tế** (Actual) và **sai số** (Error) được **tính toán hoàn toàn trên C#** bằng Động học thuận (FK) và Động học nghịch (IK).
+> ⚠️ **Sai số KHÔNG đến từ STM32.** STM32 gửi **Theta thực tế (Encoder)**, **XYAlpha mong muốn (trajectory)**, **Momen**, và **SystemState**. Toàn bộ giá trị **XYα thực tế** (FK), **Theta mong muốn** (IK) và **sai số** (Error) được **tính toán hoàn toàn trên C#**.
 
 ---
 
@@ -248,24 +255,24 @@ private const int  FRAME_TOTAL_SIZE = 77;     // Header(2) + Data(72) + State(1)
 UartManager lưu trữ **toàn bộ dữ liệu** đã nhận kể từ lần Start gần nhất. Mỗi danh sách là một `List<double>` tương ứng với 1 kênh dữ liệu:
 
 ```csharp
-// ── Mong muốn (từ UART) ─────────────
+// ── Từ UART ──────────────────────────
 public List<double> TimeList    = new();  // Nhãn thời gian (giây)
-public List<double> XList       = new();  // PosX mong muốn
-public List<double> YList       = new();  // PosY mong muốn
-public List<double> Theta1List  = new();  // Theta1 mong muốn
+public List<double> XList       = new();  // PosX mong muốn (trajectory)
+public List<double> YList       = new();  // PosY mong muốn (trajectory)
+public List<double> Theta1List  = new();  // Theta1 thực tế (Encoder)
 public List<double> Theta2List  = new();
 public List<double> Theta3List  = new();
 public List<double> Torque1List = new();  // Momen 3 động cơ
 public List<double> Torque2List = new();
 public List<double> Torque3List = new();
 
-// ── Thực tế (từ FK/IK – tính trên C#) ───
+// ── Thực tế (FK) + Mong muốn (IK) ──────
 public List<double> ActualXList      = new();  // FK → XY thực tế
 public List<double> ActualYList      = new();
 public List<double> ActualAlphaList  = new();
-public List<double> ActualTheta1List = new();  // IK → Theta thực tế
-public List<double> ActualTheta2List = new();
-public List<double> ActualTheta3List = new();
+public List<double> DesiredTheta1List = new(); // IK → Theta mong muốn
+public List<double> DesiredTheta2List = new();
+public List<double> DesiredTheta3List = new();
 
 // ── Sai số (tính trên C#) ───────────────
 public List<double> ErrorXList      = new();
@@ -417,7 +424,7 @@ private void ProcessCompleteFrame()
     };
 
     // ═══ Bước 2: Tính Động học thuận FK ═══
-    // Input:  Theta mong muốn (từ UART) + initial guess (XYAlpha mong muốn)
+    // Input:  Theta thực tế (từ Encoder/UART) + initial guess (XYAlpha mong muốn)
     // Output: XY Alpha THỰC TẾ
     RobotKinematics.ForwardKinematics(
         robotData.Theta1, robotData.Theta2, robotData.Theta3,
@@ -429,23 +436,24 @@ private void ProcessCompleteFrame()
     robotData.ActualAlpha = actualAlpha;
 
     // ═══ Bước 3: Tính Động học nghịch IK ═══
-    // Input:  XYAlpha mong muốn (từ UART)
-    // Output: Theta THỰC TẾ
+    // Input:  XYAlpha mong muốn (từ UART/trajectory)
+    // Output: Theta MONG MUỐN
     RobotKinematics.InverseKinematics(
         robotData.PosX, robotData.PosY, robotData.Alpha,
-        out double actualTheta1, out double actualTheta2, out double actualTheta3);
+        out double desiredTheta1, out double desiredTheta2, out double desiredTheta3);
 
-    robotData.ActualTheta1 = actualTheta1;
-    robotData.ActualTheta2 = actualTheta2;
-    robotData.ActualTheta3 = actualTheta3;
+    robotData.DesiredTheta1 = desiredTheta1;
+    robotData.DesiredTheta2 = desiredTheta2;
+    robotData.DesiredTheta3 = desiredTheta3;
 
-    // ═══ Bước 4: Tính sai số = Mong muốn – Thực tế ═══
+    // ═══ Bước 4: Tính sai số = Mong muốn − Thực tế ═══
     robotData.ErrorX      = robotData.PosX  - actualX;
     robotData.ErrorY      = robotData.PosY  - actualY;
     robotData.ErrorAlpha  = robotData.Alpha - actualAlpha;
-    robotData.ErrorTheta1 = robotData.Theta1 - actualTheta1;
-    robotData.ErrorTheta2 = robotData.Theta2 - actualTheta2;
-    robotData.ErrorTheta3 = robotData.Theta3 - actualTheta3;
+    // Sai số Theta: IK(desired) − Encoder(actual)
+    robotData.ErrorTheta1 = desiredTheta1 - robotData.Theta1;
+    robotData.ErrorTheta2 = desiredTheta2 - robotData.Theta2;
+    robotData.ErrorTheta3 = desiredTheta3 - robotData.Theta3;
 
     // ═══ Bước 5: Lưu vào 21 danh sách (thread-safe) ═══
     lock (XList)   // Khóa để tránh xung đột với Trends đang đọc
@@ -511,9 +519,9 @@ public void SendControlSignal(byte trajectoryId, bool isStart, bool isStop, bool
 public class RobotData
 {
     // ── Từ UART (9 giá trị double + 1 byte trạng thái) ──
-    public double Theta1 { get; set; }    // Góc mong muốn khớp 1 (rad)
-    public double Theta2 { get; set; }    // Góc mong muốn khớp 2
-    public double Theta3 { get; set; }    // Góc mong muốn khớp 3
+    public double Theta1 { get; set; }    // Góc THỰC TẾ khớp 1 (Encoder, rad)
+    public double Theta2 { get; set; }    // Góc THỰC TẾ khớp 2
+    public double Theta3 { get; set; }    // Góc THỰC TẾ khớp 3
     public double PosX   { get; set; }    // Tọa độ X mong muốn (m)
     public double PosY   { get; set; }    // Tọa độ Y mong muốn (m)
     public double Alpha  { get; set; }    // Góc nghiêng mong muốn (rad)
@@ -595,7 +603,7 @@ private const double EPSILON  = 1e-12;  // Ngưỡng hội tụ
 
 ```
 Đầu vào:  (x, y, alpha) — vị trí + hướng mâm MONG MUỐN
-Đầu ra:   (theta1, theta2, theta3) — góc khớp THỰC TẾ
+Đầu ra:   (theta1, theta2, theta3) — góc khớp MONG MUỐN
 ```
 
 **Thuật toán (cho mỗi khớp i = 1, 2, 3):**
@@ -650,7 +658,7 @@ public static bool InverseKinematics(double x, double y, double alpha,
 **Mục đích:** Cho biết góc 3 khớp → Tính vị trí thực tế của mâm.
 
 ```
-Đầu vào:  (theta1, theta2, theta3) — góc MONG MUỐN từ UART
+Đầu vào:  (theta1, theta2, theta3) — góc THỰC TẾ từ Encoder/UART
            (x0, y0, alpha0) — initial guess = XYAlpha mong muốn
 Đầu ra:   (actualX, actualY, actualAlpha) — XYAlpha THỰC TẾ
 ```
@@ -807,14 +815,14 @@ StartCommand = new RelayCommand(ExecuteStart);  // Gắn hàm ExecuteStart vào 
 #### 6.3.1. Các trường nội bộ (Backing Fields)
 
 ```csharp
-// ── Biến mong muốn (nhận từ UART) ──
+// ── Biến từ UART (Encoder + Trajectory) ──
 private double _toaDoX, _toaDoY, _gocAlpha;
 private double _gocTheta1, _gocTheta2, _gocTheta3;
 private double _momen1, _momen2, _momen3;
 
-// ── Biến thực tế (tính từ FK/IK) ──
+// ── Biến thực tế (FK) + mong muốn (IK) ──
 private double _actualX, _actualY, _actualAlpha;
-private double _actualTheta1, _actualTheta2, _actualTheta3;
+private double _desiredTheta1, _desiredTheta2, _desiredTheta3;
 
 // ── Biến sai số (tính toán) ──
 private double _errorX, _errorY, _errorAlpha;
@@ -888,7 +896,7 @@ public void UpdateData(double x, double y, double alpha,
 ```csharp
 public void UpdateDataFromRobotData(RobotData data)
 {
-    // Gọi UpdateData() trước (Edge Detection + cập nhật mong muốn)
+    // Gọi UpdateData() trước (Edge Detection + cập nhật từ UART)
     UpdateData(data.PosX, data.PosY, data.Alpha, ...);
 
     // Bổ sung Actual/Error từ kết quả kinematics
@@ -896,7 +904,7 @@ public void UpdateDataFromRobotData(RobotData data)
     ErrorX = data.ErrorX; ErrorY = data.ErrorY; ...
 
     // Cập nhật ĐIỂM DỮ LIỆU CUỐI CÙNG trong _currentRunData
-    // Vì UpdateData() chỉ ghi giá trị mong muốn, Actual/Error cần bổ sung sau
+    // Vì UpdateData() chỉ ghi giá trị từ UART, Actual(FK)/Desired(IK)/Error cần bổ sung sau
     if (_currentRunId >= 0 && _currentRunData.Count > 0)
     {
         var last = _currentRunData[_currentRunData.Count - 1];
@@ -1004,8 +1012,8 @@ public string DurationDisplay
 | **Khóa** | DataID, RunID, TimeOffset | Tự sinh / PC |
 | **XY mong muốn** | Target_X, Target_Y, Alpha | UART |
 | **XY thực tế** | X, Y, ActualAlpha | FK |
-| **Theta mong muốn** | Theta1, Theta2, Theta3 | UART |
-| **Theta thực tế** | ActualTheta1, ActualTheta2, ActualTheta3 | IK |
+| **Theta thực tế (Encoder)** | Theta1, Theta2, Theta3 | UART |
+| **Theta mong muốn (IK)** | ActualTheta1, ActualTheta2, ActualTheta3 | IK |
 | **Momen** | Torque1, Torque2, Torque3 | UART |
 | **Sai số XY** | ErrorX, ErrorY, ErrorAlpha | Tính |
 | **Sai số Theta** | Error1, Error2, Error3 | Tính |
